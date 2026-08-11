@@ -137,6 +137,18 @@ async function main() {
   const headPatch = await git.getCommitPatch(tmp, headHash);
   check('commit patch has subject content', headPatch.includes('after merge'), headPatch.slice(0, 200));
 
+  console.log('\n--- file tree / content ---');
+  const tree = await git.getTree(tmp);
+  check('tree lists tracked files', tree.files.includes('a.txt') && tree.files.includes('c.txt'),
+    tree.files.slice(0, 10).join(','));
+  check('tree excludes untracked', !tree.files.includes('untracked.txt'),
+    tree.files.slice(0, 10).join(','));
+  const content = await git.getFileContent(tmp, 'a.txt');
+  check('file content at HEAD', content.content.includes('line1') && !content.binary,
+    JSON.stringify(content).slice(0, 120));
+  const binContent = await git.getFileContent(tmp, 'nope-missing.txt').then(() => false).catch(() => true);
+  check('missing file rejects', binContent);
+
   console.log('\n--- cleanup ---');
   fs.rmSync(tmp, { recursive: true, force: true });
 

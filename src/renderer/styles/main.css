@@ -301,6 +301,60 @@ html, body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
 }
 .file-zone { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; color: var(--text-faint); }
+
+/* ---------- file tree ---------- */
+.tree-body { flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 8px 4px; }
+.tree-branch { }
+.tree-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px; cursor: pointer; border-radius: 3px;
+  font-family: var(--mono); font-size: 12px;
+  color: var(--text-dim); white-space: nowrap;
+  transition: background 0.1s ease;
+}
+.tree-row:hover { background: rgba(0, 229, 255, 0.06); color: var(--text); }
+.tree-row.tree-dir { color: var(--cyan); }
+.tree-row.tree-dir:hover { color: var(--cyan); text-shadow: 0 0 8px rgba(0, 229, 255, 0.5); }
+.tree-row.tree-file.is-selected {
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--cyan);
+  box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.35);
+}
+.tree-row.is-untracked .tree-name { color: var(--amber); }
+.tree-arrow { width: 12px; flex: none; font-size: 10px; color: var(--text-faint); }
+.tree-icon { flex: none; font-size: 11px; color: var(--text-faint); }
+.tree-dir .tree-icon { color: var(--cyan); }
+.tree-tag {
+  font-size: 9px; font-weight: 700; color: var(--amber);
+  border: 1px solid rgba(255, 230, 0, 0.4); border-radius: 3px;
+  padding: 0 4px; margin-left: auto;
+}
+.tree-name { overflow: hidden; text-overflow: ellipsis; }
+.tree-children { }
+
+/* ---------- file viewer ---------- */
+.file-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 5;
+  background: rgba(8, 10, 22, 0.94);
+}
+.file-toolbar-title {
+  flex: 1; font-family: var(--mono); font-size: 11px; color: var(--cyan);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-toolbar .btn { font-size: 10px; padding: 3px 12px; }
+.file-toolbar .btn.fmode.is-active {
+  background: rgba(0, 229, 255, 0.18); color: var(--cyan);
+  border-color: var(--cyan); box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+.file-content { font-family: var(--mono); font-size: 11px; color: var(--text-faint); padding: 12px 14px; }
+.file-view {
+  margin: 0; padding: 12px 14px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  color: var(--text); tab-size: 2;
+  white-space: pre; overflow-x: auto;
+}
 .zone-staged { color: var(--amber); }
 .zone-unstaged { color: var(--cyan); }
 .zone-untracked { color: var(--magenta); }

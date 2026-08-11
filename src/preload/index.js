@@ -27,6 +27,8 @@ const api = {
   deleteBranch: (repo, name) => invoke('git:branch-delete', repo, name),
   clone: (url, dest) => invoke('git:clone', url, dest),
   stats: (repo) => invoke('git:stats', repo),
+  tree: (repo) => invoke('git:tree', repo),
+  fileContent: (repo, file) => invoke('git:file-content', repo, file),
 
   pickFolder: () => invoke('dialog:pick-folder'),
   pickRepo: () => invoke('dialog:pick-repo'),

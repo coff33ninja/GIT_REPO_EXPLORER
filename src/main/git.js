@@ -322,6 +322,21 @@ async function getStats(repoPath) {
   return { commits: parseInt(out.trim(), 10) || 0 };
 }
 
+async function getTree(repoPath) {
+  const raw = await runGit(['ls-tree', '-r', '--name-only', '-z', 'HEAD'], repoPath);
+  const files = raw ? raw.split('\u0000').filter(Boolean) : [];
+  return { files };
+}
+
+async function getFileContent(repoPath, file) {
+  const { stdout } = await execFileAsync(
+    'git',
+    ['show', 'HEAD:' + file],
+    { cwd: repoPath, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, windowsHide: true }
+  );
+  return { binary: stdout.includes('\u0000'), content: stdout };
+}
+
 module.exports = {
   isRepo,
   repoRoot,
@@ -345,4 +360,6 @@ module.exports = {
   deleteBranch,
   clone,
   getStats,
+  getTree,
+  getFileContent,
 };

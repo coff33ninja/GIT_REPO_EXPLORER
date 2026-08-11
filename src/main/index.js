@@ -27,6 +27,8 @@ const GIT_HANDLERS = {
   'git:branch-create': (_, repo, name, from) => git.createBranch(repo, name, from),
   'git:branch-delete': (_, repo, name) => git.deleteBranch(repo, name),
   'git:stats': (_, repo) => git.getStats(repo),
+  'git:tree': (_, repo) => git.getTree(repo),
+  'git:file-content': (_, repo, file) => git.getFileContent(repo, file),
 };
 
 function registerIpc() {
@@ -157,6 +159,7 @@ function createWindow() {
           sh(['merge', 'feature/x', '--no-ff', '-m', 'merge feature/x'], fixture);
           commit('c.txt', 'three\n', 'post merge', fixture);
           fs.writeFileSync(path.join(fixture, 'dirty.txt'), 'dirty\n');
+          fs.writeFileSync(path.join(fixture, 'a.txt'), 'one\nmodified\n');
 
           const openResult = await win.webContents.executeJavaScript(
             '(async function(){try{await window.__neon.openRepo(' + JSON.stringify(fixture) + ');return "OK";}catch(e){return "THROW:"+e.message;}})()'
@@ -214,6 +217,42 @@ function createWindow() {
             'document.querySelectorAll("#inspectorBody .commit-card").length'
           );
 
+          await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".tab")[2].click()'
+          );
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'document.querySelectorAll(".tree-row.tree-file").length > 0'
+            );
+          }, 8000);
+          const fileTreeCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".tree-row.tree-file").length'
+          );
+          await win.webContents.executeJavaScript(
+            '(function(){var r=document.querySelector(".tree-row.tree-file");if(r)r.click();return !!r;})()'
+          );
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'document.querySelectorAll("#inspectorBody .file-view").length > 0'
+            );
+          }, 8000);
+          const fileViewCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll("#inspectorBody .file-view").length'
+          );
+          await win.webContents.executeJavaScript(
+            '(function(){var b=Array.from(document.querySelectorAll(".file-toolbar .btn")).find(function(x){return x.textContent.trim()==="DIFF";});if(b)b.click();return !!b;})()'
+          );
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'document.querySelectorAll("#inspectorBody .diff-file, #inspectorBody .file-content").length > 0 && !document.getElementById("inspectorBody").textContent.includes("LOADING")'
+            );
+          }, 8000);
+          const fileDiffToggleCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll("#inspectorBody .diff-file").length'
+          );
+          await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".tab")[0].click()'
+          );
           const shot = await win.webContents.capturePage();
           const outPath = path.join(__dirname, '..', '..', 'docs', 'screenshot.png');
           fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -251,6 +290,7 @@ function createWindow() {
           console.log('SMOKE graph=' + JSON.stringify(graphStats) + ' branch=' + JSON.stringify(branch) +
             ' leds=' + JSON.stringify(leds) + ' pixels=' + pixels +
             ' status=' + JSON.stringify(statusStats) + ' fileRows=' + fileRows +
+            ' tree=' + fileTreeCount + ' files=' + fileViewCount + ' diffToggle=' + fileDiffToggleCount +
             ' dbg=' + JSON.stringify(dbg) + ' toasts=' + JSON.stringify(toasts));
 
           fs.rmSync(fixture, { recursive: true, force: true });
@@ -261,6 +301,9 @@ function createWindow() {
             fileRows >= 1 &&
             fileDiffCount >= 1 &&
             commitCardCount >= 1 &&
+            fileTreeCount >= 1 &&
+            fileViewCount >= 1 &&
+            fileDiffToggleCount >= 1 &&
             parseInt(canvasDims.split('x')[0], 10) > 500;
           if (!ok) throw new Error('renderer state mismatch');
           if (problems.length) {

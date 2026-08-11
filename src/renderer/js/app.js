@@ -11,6 +11,9 @@
     currentHead: null,
     fullStatus: null,
     selectedFile: null,
+    treeRoots: [],
+    fileMode: 'view',
+    fileJob: 0,
   };
 
   const refs = {
@@ -24,6 +27,8 @@
     chipBranch: $('#chipBranch'),
     graphStats: $('#graphStats'),
     statusStats: $('#statusStats'),
+    fileTree: $('#fileTree'),
+    fileStats: $('#fileStats'),
     footPath: $('#footPath'),
     footStats: $('#footStats'),
     statusLeds: $('#statusLeds'),
@@ -183,6 +188,9 @@
     state.commits = commits;
     state.currentHead = (await api.repoMeta(repo).catch(() => ({ head: null }))).head;
     state.fullStatus = fullStatus;
+    const treeRes = await api.tree(repo).catch(() => ({ files: [] }));
+    state.treeRoots = buildTree(treeRes.files || [], fullStatus);
+    renderFileTree();
     refs.footStats.textContent = 'commits: ' + (stats.commits ?? '-');
 
     graph.setData(commits, state.currentHead);
@@ -382,6 +390,185 @@
     refs.inspectorBody.appendChild(window.DiffView.renderDiff(text));
   }
 
+  /* ---------------- file tree ---------------- */
+  function buildTree(files, status) {
+    const roots = [];
+    const rootMap = new Map();
+    const ensureDir = (map, arr, name, fullPath, untracked) => {
+      let n = map.get(name);
+      if (!n) {
+        n = { name, path: fullPath, dir: true, expanded: false, untracked, children: [], childMap: new Map() };
+        map.set(name, n);
+        arr.push(n);
+      } else if (untracked && !n.untracked) {
+        n.untracked = true;
+      }
+      return n;
+    };
+    const addFile = (file, untracked) => {
+      const parts = file.split('/');
+      let map = rootMap;
+      let arr = roots;
+      for (let i = 0; i < parts.length; i++) {
+        const last = i === parts.length - 1;
+        const part = parts[i];
+        if (last) {
+          let n = map.get(part);
+          if (!n) {
+            n = { name: part, path: file, dir: false, expanded: false, untracked, children: [], childMap: new Map() };
+            map.set(part, n);
+            arr.push(n);
+          }
+        } else {
+          const d = ensureDir(map, arr, part, parts.slice(0, i + 1).join('/'), untracked);
+          map = d.childMap;
+          arr = d.children;
+        }
+      }
+    };
+    for (const f of files) addFile(f, false);
+    const untracked = (status && status.entries || [])
+      .filter((e) => e.xy === '??')
+      .map((e) => cleanPath(e.file));
+    for (const f of untracked) addFile(f, true);
+    const sortLevel = (arr) => {
+      arr.sort((a, b) => {
+        if (a.dir !== b.dir) return a.dir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      for (const n of arr) if (n.dir) sortLevel(n.children);
+    };
+    sortLevel(roots);
+    return roots;
+  }
+
+  function renderFileTree() {
+    refs.fileTree.innerHTML = '';
+    const roots = state.treeRoots;
+    if (!roots.length) {
+      refs.fileTree.innerHTML = '<div class="status-empty">NO FILES AT HEAD</div>';
+      refs.fileStats.textContent = '0 files';
+      return;
+    }
+    const count = countFiles(roots);
+    refs.fileStats.textContent = count + ' file' + (count === 1 ? '' : 's') + ' @ HEAD';
+    for (const node of roots) refs.fileTree.appendChild(renderTreeNode(node, 0));
+  }
+
+  function countFiles(nodes) {
+    let n = 0;
+    for (const node of nodes) n += node.dir ? countFiles(node.children) : 1;
+    return n;
+  }
+
+  function renderTreeNode(node, depth) {
+    const wrap = el('div', 'tree-branch');
+    const row = el(
+      'div',
+      'tree-row ' + (node.dir ? 'tree-dir' : 'tree-file') + (node.untracked ? ' is-untracked' : '')
+    );
+    row.style.paddingLeft = 6 + depth * 14 + 'px';
+    const arrow = el('span', 'tree-arrow', node.dir ? (node.expanded ? '\u25be' : '\u25b8') : '');
+    const icon = el('span', 'tree-icon', node.dir ? '\u25a3' : '\u25a1');
+    const name = el('span', 'tree-name', node.name);
+    if (node.untracked && !node.dir) {
+      const tag = el('span', 'tree-tag', 'U');
+      tag.title = 'untracked';
+      row.append(arrow, icon, name, tag);
+    } else {
+      row.append(arrow, icon, name);
+    }
+    wrap.appendChild(row);
+    if (node.dir) {
+      row.addEventListener('click', () => {
+        node.expanded = !node.expanded;
+        renderFileTree();
+      });
+      if (node.expanded) {
+        const kids = el('div', 'tree-children');
+        for (const c of node.children) kids.appendChild(renderTreeNode(c, depth + 1));
+        wrap.appendChild(kids);
+      }
+    } else {
+      row.addEventListener('click', () => {
+        document.querySelectorAll('.tree-file.is-selected').forEach((n) => n.classList.remove('is-selected'));
+        row.classList.add('is-selected');
+        showFileInInspector(node.path);
+      });
+    }
+    return wrap;
+  }
+
+  async function showFileInInspector(file) {
+    if (!state.currentRepo) return;
+    state.selectedFile = file;
+    state.fileMode = 'view';
+    const job = ++state.fileJob;
+    refs.inspectorBody.innerHTML = '';
+    const toolbar = el('div', 'file-toolbar');
+    const title = el('span', 'file-toolbar-title', file);
+    const btnView = el('button', 'btn btn-ghost fmode', 'VIEW');
+    const btnDiff = el('button', 'btn btn-ghost fmode', 'DIFF');
+    const setActive = () => {
+      btnView.classList.toggle('is-active', state.fileMode === 'view');
+      btnDiff.classList.toggle('is-active', state.fileMode === 'diff');
+    };
+    btnView.addEventListener('click', () => {
+      state.fileMode = 'view';
+      setActive();
+      loadFilePane(file, job);
+    });
+    btnDiff.addEventListener('click', () => {
+      state.fileMode = 'diff';
+      setActive();
+      loadFilePane(file, job);
+    });
+    toolbar.append(title, btnView, btnDiff);
+    refs.inspectorBody.appendChild(toolbar);
+    setActive();
+    await loadFilePane(file, job);
+  }
+
+  async function loadFilePane(file, job) {
+    if (job !== state.fileJob) return;
+    refs.inspectorBody.querySelector('.file-content')?.remove();
+    const holder = el('div', 'file-content');
+    refs.inspectorBody.appendChild(holder);
+    holder.textContent = 'LOADING // ' + file;
+    try {
+      let text;
+      let render;
+      if (state.fileMode === 'diff') {
+        text = await api.diffHead(state.currentRepo.path, file);
+        render = () => {
+          if (!text || !text.trim()) {
+            holder.textContent = '// no changes vs HEAD';
+            return;
+          }
+          holder.appendChild(window.DiffView.renderDiff(text));
+        };
+      } else {
+        const res = await api.fileContent(state.currentRepo.path, file);
+        render = () => {
+          if (res.binary) {
+            holder.textContent = '// binary file -- content not shown';
+            return;
+          }
+          const pre = el('pre', 'file-view');
+          pre.textContent = res.content.length > 200000
+            ? res.content.slice(0, 200000) + '\n// ... output truncated'
+            : res.content;
+          holder.appendChild(pre);
+        };
+      }
+      if (job !== state.fileJob) return;
+      holder.textContent = '';
+      render();
+    } catch (err) {
+      if (job === state.fileJob) holder.textContent = 'LOAD FAILED: ' + err.message;
+    }
+  }
+
   /* ---------------- inspector / commit diff ---------------- */
   async function showCommit(hash) {
     if (!state.currentRepo) return;
@@ -453,6 +640,7 @@
       if (e.key === 'F5') { e.preventDefault(); refresh(); }
       if (e.key === '1') switchTab('graph');
       if (e.key === '2') switchTab('status');
+      if (e.key === '3') switchTab('files');
       if (e.key === 'Escape') {
         backdropClick();
         refs.inspectorBody.innerHTML =

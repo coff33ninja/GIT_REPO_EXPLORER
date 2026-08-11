@@ -65,6 +65,7 @@
       <nav class="tabbar">
         <button class="tab is-active" data-tab="graph">GRAPH</button>
         <button class="tab" data-tab="status">STATUS</button>
+        <button class="tab" data-tab="files">FILES</button>
         <div class="tabbar-glow"></div>
       </nav>
 
@@ -85,6 +86,16 @@
             <span class="graph-stats" id="statusStats"></span>
           </div>
           <div class="status-body" id="statusList"></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-files">
+        <div class="status-wrap">
+          <div class="status-head">
+            <span class="panel-label">FILE TREE @ HEAD</span>
+            <span class="graph-stats" id="fileStats"></span>
+          </div>
+          <div class="status-body tree-body" id="fileTree"></div>
         </div>
       </div>
 
