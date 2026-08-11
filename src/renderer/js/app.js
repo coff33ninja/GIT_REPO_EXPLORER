@@ -6,6 +6,7 @@
 
   const state = {
     repos: [],
+    workspaces: [],
     currentRepo: null,
     commits: [],
     currentHead: null,
@@ -41,6 +42,16 @@
   function saveRepos() {
     try {
       localStorage.setItem('neon.repos', JSON.stringify(state.repos.map((r) => r.path)));
+      localStorage.setItem(
+        'neon.workspaces',
+        JSON.stringify(
+          state.workspaces.map((w) => ({
+            root: w.root,
+            expanded: w.expanded,
+            repos: w.repos.map((r) => r.path),
+          }))
+        )
+      );
     } catch { /* ignore */ }
   }
 
@@ -56,26 +67,67 @@
         }
       } catch { /* skip */ }
     }
+    let saved = [];
+    try {
+      saved = JSON.parse(localStorage.getItem('neon.workspaces') || '[]');
+    } catch { saved = []; }
+    for (const w of saved) {
+      const repos = [];
+      for (const p of w.repos) {
+        try {
+          if (await api.isRepo(p)) {
+            repos.push({ path: p, name: p.split(/[\\/]/).pop(), parent: '' });
+          }
+        } catch { /* skip */ }
+      }
+      if (repos.length) {
+        state.workspaces.push({ root: w.root, expanded: w.expanded !== false, repos });
+      }
+    }
     renderRepoList();
-    if (state.repos.length) await openRepo(state.repos[0].path);
+    const first =
+      state.repos[0] || (state.workspaces[0] && state.workspaces[0].repos[0]);
+    if (first) await openRepo(first.path);
   }
 
   /* ---------------- repo list ---------------- */
+  function appendRepoItem(list, r, nested) {
+    const item = el('li', 'repo-item');
+    if (nested) item.classList.add('repo-item-nested');
+    item.innerHTML =
+      '<div class="repo-name"></div><div class="repo-path"></div>';
+    item.querySelector('.repo-name').textContent = r.name;
+    item.querySelector('.repo-path').textContent = r.path;
+    if (state.currentRepo && state.currentRepo.path === r.path) {
+      item.classList.add('is-active');
+    }
+    item.addEventListener('click', () => openRepo(r.path));
+    list.appendChild(item);
+  }
+
   function renderRepoList() {
     refs.repoList.innerHTML = '';
-    for (const r of state.repos) {
-      const item = el('li', 'repo-item');
-      item.innerHTML =
-        '<div class="repo-name"></div><div class="repo-path"></div>';
-      item.querySelector('.repo-name').textContent = r.name;
-      item.querySelector('.repo-path').textContent = r.path;
-      if (state.currentRepo && state.currentRepo.path === r.path) {
-        item.classList.add('is-active');
+    for (const r of state.repos) appendRepoItem(refs.repoList, r, false);
+    for (const w of state.workspaces) {
+      const head = el('li', 'repo-group');
+      head.innerHTML =
+        '<span class="repo-group-arrow"></span>' +
+        '<span class="repo-group-name"></span>' +
+        '<span class="repo-group-count"></span>';
+      head.querySelector('.repo-group-arrow').textContent = w.expanded ? '\u25BE' : '\u25B8';
+      head.querySelector('.repo-group-name').textContent = w.root;
+      head.querySelector('.repo-group-count').textContent = w.repos.length;
+      head.addEventListener('click', () => {
+        w.expanded = !w.expanded;
+        saveRepos();
+        renderRepoList();
+      });
+      refs.repoList.appendChild(head);
+      if (w.expanded) {
+        for (const r of w.repos) appendRepoItem(refs.repoList, r, true);
       }
-      item.addEventListener('click', () => openRepo(r.path));
-      refs.repoList.appendChild(item);
     }
-    if (!state.repos.length) {
+    if (!state.repos.length && !state.workspaces.length) {
       const empty = el('li', 'repo-item');
       empty.style.color = 'var(--text-faint)';
       empty.style.fontFamily = 'var(--mono)';
@@ -93,22 +145,45 @@
     }
   }
 
-  async function scanFolder() {
-    const dir = await api.pickFolder();
-    if (!dir) return;
+  async function scanWorkspace(dir) {
     toast('SCANNING // ' + dir, 'ok');
     try {
-      const found = await api.scan(dir, 3);
+      const found = await api.scan(dir, 4);
       if (!found.length) {
         toast('NO REPOSITORIES FOUND IN ' + dir, 'err');
-        return;
+        return [];
       }
-      for (const r of found) addRepo(r);
-      toast('FOUND ' + found.length + ' REPOSITOR' + (found.length > 1 ? 'IES' : 'Y'));
+      const repos = found.map((r) => ({
+        path: r.path,
+        name: r.name,
+        parent: r.parent,
+      }));
+      const ws = state.workspaces.find((w) => w.root === dir);
+      if (ws) {
+        ws.repos = repos;
+        ws.expanded = true;
+      } else {
+        state.workspaces.push({ root: dir, expanded: true, repos });
+      }
+      saveRepos();
+      renderRepoList();
+      toast(
+        'FOUND ' +
+          found.length +
+          ' REPOSITOR' +
+          (found.length > 1 ? 'IES' : 'Y')
+      );
       if (!state.currentRepo) await openRepo(found[0].path);
+      return found;
     } catch (err) {
       toast('SCAN FAILED: ' + err.message, 'err');
     }
+  }
+
+  async function scanFolder() {
+    const dir = await api.pickFolder();
+    if (!dir) return;
+    await scanWorkspace(dir);
   }
 
   async function addRepoDirect() {
@@ -673,7 +748,7 @@
     setTimeout(() => {
       refs.bootVeil.style.display = 'none';
     }, 500);
-    window.__neon = { openRepo, refresh, state, appReady };
+    window.__neon = { openRepo, refresh, state, appReady, scanWorkspace };
   }
 
   function appReady() {

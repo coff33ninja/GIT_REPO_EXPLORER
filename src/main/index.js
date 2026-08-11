@@ -250,6 +250,30 @@ function createWindow() {
           const fileDiffToggleCount = await win.webContents.executeJavaScript(
             'document.querySelectorAll("#inspectorBody .diff-file").length'
           );
+
+          const wsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'neon-workspace-'));
+          fs.mkdirSync(path.join(wsRoot, 'proj-a', 'inner'), { recursive: true });
+          fs.mkdirSync(path.join(wsRoot, 'proj-b'), { recursive: true });
+          for (const p of ['proj-a', 'proj-b']) {
+            const sub = path.join(wsRoot, p);
+            sh(['init', '-b', 'main'], sub);
+            sh(['config', 'user.email', 'smoke@neon.dev'], sub);
+            sh(['config', 'user.name', 'Smoke Test'], sub);
+            commit('x.txt', 'x\n', 'init', sub);
+          }
+          const scanResult = await win.webContents.executeJavaScript(
+            '(async function(){var found=await window.__neon.scanWorkspace(' + JSON.stringify(wsRoot) + ');return JSON.stringify(found.map(function(r){return r.name;}));})()'
+          );
+          const repoGroupCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".repo-group").length'
+          );
+          const nestedRepoCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".repo-item-nested").length'
+          );
+          const wsRootShown = await win.webContents.executeJavaScript(
+            'document.querySelector(".repo-group-name") ? document.querySelector(".repo-group-name").textContent === ' + JSON.stringify(wsRoot) + ' : false'
+          );
+          fs.rmSync(wsRoot, { recursive: true, force: true });
           await win.webContents.executeJavaScript(
             'document.querySelectorAll(".tab")[0].click()'
           );
@@ -291,6 +315,8 @@ function createWindow() {
             ' leds=' + JSON.stringify(leds) + ' pixels=' + pixels +
             ' status=' + JSON.stringify(statusStats) + ' fileRows=' + fileRows +
             ' tree=' + fileTreeCount + ' files=' + fileViewCount + ' diffToggle=' + fileDiffToggleCount +
+            ' scan=' + JSON.stringify(scanResult) + ' groups=' + repoGroupCount + ' nested=' + nestedRepoCount +
+            ' wsRootShown=' + wsRootShown +
             ' dbg=' + JSON.stringify(dbg) + ' toasts=' + JSON.stringify(toasts));
 
           fs.rmSync(fixture, { recursive: true, force: true });
@@ -304,6 +330,10 @@ function createWindow() {
             fileTreeCount >= 1 &&
             fileViewCount >= 1 &&
             fileDiffToggleCount >= 1 &&
+            repoGroupCount >= 1 &&
+            nestedRepoCount >= 2 &&
+            wsRootShown === true &&
+            JSON.parse(scanResult).length >= 2 &&
             parseInt(canvasDims.split('x')[0], 10) > 500;
           if (!ok) throw new Error('renderer state mismatch');
           if (problems.length) {
