@@ -387,6 +387,7 @@
     refs.inspectorBody.innerHTML = '';
     try {
       const info = await api.commitInfo(state.currentRepo.path, hash);
+      const patch = await api.commitPatch(state.currentRepo.path, hash, false).catch(() => '');
       const card = el('div', 'commit-card');
       card.innerHTML =
         '<div class="cc-hash">' + info.hash.slice(0, 12) + '</div>' +
@@ -399,13 +400,20 @@
         '<div class="cc-stats"></div>';
       card.querySelector('.cc-msg').textContent = info.subject;
       const statsEl = card.querySelector('.cc-stats');
-      const ins = (info.patch.match(/^\+/gm) || []).length;
-      const del = (info.patch.match(/^-(?!-)/gm) || []).length;
+      const ins = (patch.match(/^\+/gm) || []).length;
+      const del = (patch.match(/^-(?!-)/gm) || []).length;
       statsEl.innerHTML =
         '<span class="ins">+' + ins + '</span> &nbsp; <span class="del">-' + del + '</span>';
       refs.inspectorBody.appendChild(card);
-      if (info.patch) {
-        refs.inspectorBody.appendChild(window.DiffView.renderDiff(info.patch));
+      if (info.stat) {
+        const statCard = el('div', 'diff-file');
+        const statHead = el('div', 'diff-file-head', 'FILES CHANGED');
+        const statBody = el('div', 'diff-empty', info.stat.trim());
+        statCard.append(statHead, statBody);
+        refs.inspectorBody.appendChild(statCard);
+      }
+      if (patch) {
+        refs.inspectorBody.appendChild(window.DiffView.renderDiff(patch));
       } else {
         const div = el('div', 'diff-empty', '// empty commit');
         refs.inspectorBody.appendChild(div);

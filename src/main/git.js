@@ -255,15 +255,12 @@ async function getCommitPatch(repoPath, hash, stat = false) {
 }
 
 async function getCommitInfo(repoPath, hash) {
+  const fmt = '%H' + FIELD_SEP + '%P' + FIELD_SEP + '%an' + FIELD_SEP + '%ae' + FIELD_SEP + '%ad' + FIELD_SEP + '%s' + RECORD_SEP;
   const raw = await runGit(
-    [
-      'show', '--no-ext-diff', '--stat', '--format=' +
-        `%H${FIELD_SEP}%P${FIELD_SEP}%an${FIELD_SEP}%ae${FIELD_SEP}%ad${FIELD_SEP}%s${RECORD_SEP}`,
-      '--date=iso-strict', hash,
-    ],
+    ['show', '--no-ext-diff', '--stat', '--no-patch', '--format=' + fmt, '--date=iso-strict', hash],
     repoPath
   );
-  const [record, patch, statBlock] = raw.split(RECORD_SEP);
+  const [record, statBlock] = raw.replace(/^\n/, '').split(RECORD_SEP);
   const fields = (record || '').split(FIELD_SEP);
   return {
     hash: fields[0] || hash,
@@ -272,7 +269,6 @@ async function getCommitInfo(repoPath, hash) {
     email: fields[3] || '',
     date: fields[4] || '',
     subject: fields[5] || '',
-    patch: patch || '',
     stat: statBlock || '',
   };
 }

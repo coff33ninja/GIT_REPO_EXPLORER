@@ -130,7 +130,12 @@ async function main() {
   check('untracked diff shows +fresh', /^\+fresh$/m.test(untracked), untracked.split('\n').slice(-4).join(' '));
   const info = await git.getCommitInfo(tmp, mergeHash);
   check('commit info hash', info.hash === mergeHash);
-  check('commit patch has both parents content', info.patch.includes('glow') && info.patch.includes('mainline'));
+  check('clean merge shows empty stat', info.stat.trim() === '', info.stat.slice(0, 120));
+  const headHash = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmp, encoding: 'utf8' }).trim();
+  const headInfo = await git.getCommitInfo(tmp, headHash);
+  check('commit stat lists e.txt', headInfo.stat.includes('e.txt'), headInfo.stat.slice(0, 200));
+  const headPatch = await git.getCommitPatch(tmp, headHash);
+  check('commit patch has subject content', headPatch.includes('after merge'), headPatch.slice(0, 200));
 
   console.log('\n--- cleanup ---');
   fs.rmSync(tmp, { recursive: true, force: true });
