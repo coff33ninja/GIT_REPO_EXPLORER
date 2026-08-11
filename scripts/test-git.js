@@ -37,6 +37,7 @@ async function main() {
   sh(['config', 'user.name', 'Neon Tester'], tmp);
 
   commit('a.txt', 'line1\n', 'initial commit', tmp);
+  commit('README.md', '# Neon Demo\n\n## Usage\n\n- list item\n- second\n', 'add readme', tmp);
   commit('b.txt', 'hello\n', 'add b file', tmp);
 
   sh(['checkout', '-b', 'feature/glow'], tmp);
@@ -148,6 +149,18 @@ async function main() {
     JSON.stringify(content).slice(0, 120));
   const binContent = await git.getFileContent(tmp, 'nope-missing.txt').then(() => false).catch(() => true);
   check('missing file rejects', binContent);
+
+  const readme = await git.getReadme(tmp);
+  check('readme found at root', !!readme && readme.path === 'README.md', JSON.stringify(readme));
+  check('readme content present', !!readme && readme.content.includes('# Neon Demo'), JSON.stringify(readme).slice(0, 120));
+  const noRm = fs.mkdtempSync(path.join(os.tmpdir(), 'neon-norm-'));
+  sh(['init', '-b', 'main'], noRm);
+  sh(['config', 'user.email', 'tester@neon.dev'], noRm);
+  sh(['config', 'user.name', 'Neon Tester'], noRm);
+  commit('a.txt', 'x\n', 'init', noRm);
+  const noReadme = await git.getReadme(noRm);
+  check('readme absent returns null', noReadme === null, JSON.stringify(noReadme));
+  fs.rmSync(noRm, { recursive: true, force: true });
 
   console.log('\n--- cleanup ---');
   fs.rmSync(tmp, { recursive: true, force: true });

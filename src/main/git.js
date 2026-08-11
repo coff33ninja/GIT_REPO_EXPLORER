@@ -337,6 +337,21 @@ async function getFileContent(repoPath, file) {
   return { binary: stdout.includes('\u0000'), content: stdout };
 }
 
+async function getReadme(repoPath) {
+  const raw = await runGit(['ls-tree', '--name-only', 'HEAD'], repoPath);
+  const names = raw ? raw.split('\n').filter(Boolean) : [];
+  const readme = names.find(
+    (n) => /^readme(\.[a-z0-9]+)?$/i.test(n) && !n.includes('/')
+  );
+  if (!readme) return null;
+  const { stdout } = await execFileAsync(
+    'git',
+    ['show', 'HEAD:' + readme],
+    { cwd: repoPath, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, windowsHide: true }
+  );
+  return { path: readme, content: stdout.includes('\u0000') ? '(binary)' : stdout };
+}
+
 module.exports = {
   isRepo,
   repoRoot,
@@ -362,4 +377,5 @@ module.exports = {
   getStats,
   getTree,
   getFileContent,
+  getReadme,
 };

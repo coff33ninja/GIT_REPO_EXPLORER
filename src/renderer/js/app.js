@@ -245,10 +245,43 @@
       updateHud();
       await loadAll();
       graph.setSelected(null);
+      await loadReadme();
     } catch (err) {
       refs.emptyState.style.display = 'flex';
       toast('OPEN FAILED: ' + err.message, 'err');
     }
+  }
+
+  async function loadReadme() {
+    if (!state.currentRepo) return;
+    refs.inspectorBody.innerHTML = '';
+    try {
+      const readme = await api.readme(state.currentRepo.path);
+      if (!readme) {
+        showInspectorPlaceholder();
+        return;
+      }
+      const card = el('div', 'readme-card');
+      const head = el('div', 'readme-head');
+      const fname = el('span', 'readme-fname', readme.path);
+      head.appendChild(document.createTextNode('README  '));
+      head.appendChild(fname);
+      const body = window.MarkdownView.render(readme.content);
+      card.append(head, body);
+      refs.inspectorBody.appendChild(card);
+    } catch (err) {
+      showInspectorPlaceholder();
+    }
+  }
+
+  function showInspectorPlaceholder() {
+    refs.inspectorBody.innerHTML = '';
+    const div = el(
+      'div',
+      'inspector-placeholder',
+      'Select a commit or file to inspect its diff.'
+    );
+    refs.inspectorBody.appendChild(div);
   }
 
   async function loadAll() {
@@ -703,10 +736,7 @@
     $('#btnRefresh').addEventListener('click', refresh);
     $('#btnAddRepo').addEventListener('click', addRepoDirect);
     $('#btnNewBranch').addEventListener('click', createBranchFlow);
-    $('#btnCloseInspector').addEventListener('click', () => {
-      refs.inspectorBody.innerHTML =
-        '<div class="inspector-placeholder">Select a commit or file to inspect its diff.</div>';
-    });
+    $('#btnCloseInspector').addEventListener('click', showInspectorPlaceholder);
 
     document.querySelectorAll('.tab').forEach((t) =>
       t.addEventListener('click', () => switchTab(t.dataset.tab)));

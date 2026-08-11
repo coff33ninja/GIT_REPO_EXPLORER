@@ -2,6 +2,8 @@
 
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const git = require('./git');
 
 const SMOKE = process.argv.includes('--smoke');
@@ -29,6 +31,7 @@ const GIT_HANDLERS = {
   'git:stats': (_, repo) => git.getStats(repo),
   'git:tree': (_, repo) => git.getTree(repo),
   'git:file-content': (_, repo, file) => git.getFileContent(repo, file),
+  'git:readme': (_, repo) => git.getReadme(repo),
 };
 
 function registerIpc() {
@@ -153,6 +156,7 @@ function createWindow() {
           sh(['config', 'user.email', 'smoke@neon.dev'], fixture);
           sh(['config', 'user.name', 'Smoke Test'], fixture);
           commit('a.txt', 'one\n', 'initial commit', fixture);
+          commit('README.md', '# Neon Fixture\n\n## Smoke\n\n- item **bold**\n', 'add readme', fixture);
           sh(['checkout', '-b', 'feature/x'], fixture);
           commit('b.txt', 'two\n', 'feature work', fixture);
           sh(['checkout', 'main'], fixture);
@@ -185,6 +189,20 @@ function createWindow() {
           );
           const dbg = await win.webContents.executeJavaScript(
             '(window.__neon.state.currentRepo ? window.__neon.state.currentRepo.path + "|" + window.__neon.state.commits.length + " commits" : "no repo")'
+          );
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'document.querySelectorAll("#inspectorBody .readme-card").length > 0'
+            );
+          }, 8000);
+          const readmeCardCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll("#inspectorBody .readme-card").length'
+          );
+          const readmeHead = await win.webContents.executeJavaScript(
+            'document.querySelector("#inspectorBody .readme-head") ? document.querySelector("#inspectorBody .readme-head").textContent.trim() : ""'
+          );
+          const readmeBold = await win.webContents.executeJavaScript(
+            'document.querySelectorAll("#inspectorBody .readme-body b").length'
           );
           await win.webContents.executeJavaScript(
             'document.querySelectorAll(".tab")[1].click()'
@@ -315,6 +333,7 @@ function createWindow() {
             ' leds=' + JSON.stringify(leds) + ' pixels=' + pixels +
             ' status=' + JSON.stringify(statusStats) + ' fileRows=' + fileRows +
             ' tree=' + fileTreeCount + ' files=' + fileViewCount + ' diffToggle=' + fileDiffToggleCount +
+            ' readmeCard=' + readmeCardCount + ' readmeHead=' + JSON.stringify(readmeHead) + ' readmeBold=' + readmeBold +
             ' scan=' + JSON.stringify(scanResult) + ' groups=' + repoGroupCount + ' nested=' + nestedRepoCount +
             ' wsRootShown=' + wsRootShown +
             ' dbg=' + JSON.stringify(dbg) + ' toasts=' + JSON.stringify(toasts));
@@ -330,6 +349,9 @@ function createWindow() {
             fileTreeCount >= 1 &&
             fileViewCount >= 1 &&
             fileDiffToggleCount >= 1 &&
+            readmeCardCount >= 1 &&
+            readmeHead.includes('README.md') &&
+            readmeBold >= 1 &&
             repoGroupCount >= 1 &&
             nestedRepoCount >= 2 &&
             wsRootShown === true &&
@@ -355,6 +377,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (SMOKE) {
+    app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'neon-smoke-profile-')));
+  }
   registerIpc();
   createWindow();
 

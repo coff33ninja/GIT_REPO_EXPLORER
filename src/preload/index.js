@@ -29,6 +29,7 @@ const api = {
   stats: (repo) => invoke('git:stats', repo),
   tree: (repo) => invoke('git:tree', repo),
   fileContent: (repo, file) => invoke('git:file-content', repo, file),
+  readme: (repo) => invoke('git:readme', repo),
 
   pickFolder: () => invoke('dialog:pick-folder'),
   pickRepo: () => invoke('dialog:pick-repo'),
