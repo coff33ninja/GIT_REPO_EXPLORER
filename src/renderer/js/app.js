@@ -482,6 +482,7 @@
     setTimeout(() => {
       refs.bootVeil.classList.add('is-hidden');
     }, 600);
+    window.__neon = { openRepo, refresh, state };
   }
 
   function tick() {

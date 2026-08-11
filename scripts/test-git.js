@@ -130,7 +130,7 @@ async function main() {
   check('untracked diff shows +fresh', /^\+fresh$/m.test(untracked), untracked.split('\n').slice(-4).join(' '));
   const info = await git.getCommitInfo(tmp, mergeHash);
   check('commit info hash', info.hash === mergeHash);
-  check('clean merge shows empty stat', info.stat.trim() === '', info.stat.slice(0, 120));
+  check('merge stat lists merged file', info.stat.includes('c.txt'), info.stat.slice(0, 120));
   const headHash = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmp, encoding: 'utf8' }).trim();
   const headInfo = await git.getCommitInfo(tmp, headHash);
   check('commit stat lists e.txt', headInfo.stat.includes('e.txt'), headInfo.stat.slice(0, 200));
