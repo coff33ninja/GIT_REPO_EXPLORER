@@ -12,7 +12,11 @@ const RECORD_SEP = '\u001e';
 
 async function runGit(args, cwd, opts = {}) {
   try {
-    const { stdout } = await execFileAsync('git', args, {
+    const safeArgs =
+      cwd && typeof cwd === 'string'
+        ? ['-c', 'safe.directory=' + cwd.replace(/\\/g, '/')]
+        : [];
+    const { stdout } = await execFileAsync('git', [...safeArgs, ...args], {
       cwd,
       encoding: 'utf8',
       maxBuffer: 128 * 1024 * 1024,
@@ -91,7 +95,11 @@ async function scanFolderLevel(rootDir) {
     if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
     const full = path.join(rootDir, entry.name);
     if (fs.existsSync(path.join(full, '.git'))) {
-      level.repos.push({ path: full, name: entry.name, parent: rootDir });
+      if (await isRepo(full)) {
+        level.repos.push({ path: full, name: entry.name, parent: rootDir });
+      } else {
+        level.dirs.push(entry.name);
+      }
     } else {
       level.dirs.push(entry.name);
     }

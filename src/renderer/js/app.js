@@ -55,17 +55,31 @@
     } catch { /* ignore */ }
   }
 
+  async function validRepoPaths(paths, concurrency = 12) {
+    const out = [];
+    for (let i = 0; i < paths.length; i += concurrency) {
+      const chunk = paths.slice(i, i + concurrency);
+      const results = await Promise.all(
+        chunk.map(async (p) => {
+          try {
+            return (await api.isRepo(p)) ? p : null;
+          } catch {
+            return null;
+          }
+        })
+      );
+      for (const r of results) if (r) out.push(r);
+    }
+    return out;
+  }
+
   async function restoreRepos() {
     let paths = [];
     try {
       paths = JSON.parse(localStorage.getItem('neon.repos') || '[]');
     } catch { paths = []; }
-    for (const p of paths) {
-      try {
-        if (await api.isRepo(p)) {
-          state.repos.push({ path: p, name: p.split(/[\\/]/).pop(), parent: '' });
-        }
-      } catch { /* skip */ }
+    for (const p of await validRepoPaths(paths)) {
+      state.repos.push({ path: p, name: p.split(/[\\/]/).pop(), parent: '' });
     }
     let saved = [];
     try {
@@ -76,13 +90,16 @@
       let any = false;
       for (const [key, entry] of Object.entries(w.folders || {})) {
         if (!entry) continue;
+        const repos = await validRepoPaths(
+          Array.isArray(entry.repos) ? entry.repos : []
+        );
         folders[key] = {
           loaded: true,
           open: entry.open !== false,
-          repos: Array.isArray(entry.repos) ? entry.repos : [],
+          repos,
           dirs: Array.isArray(entry.dirs) ? entry.dirs : [],
         };
-        if (folders[key].repos.length) any = true;
+        if (repos.length) any = true;
       }
       if (any) {
         state.workspaces.push({
@@ -377,7 +394,21 @@
     } catch (err) {
       refs.emptyState.style.display = 'flex';
       toast('OPEN FAILED: ' + err.message, 'err');
+      try {
+        if (!(await api.isRepo(path))) pruneRepoPath(path);
+      } catch { /* ignore */ }
     }
+  }
+
+  function pruneRepoPath(repoPath) {
+    state.repos = state.repos.filter((r) => r.path !== repoPath);
+    for (const ws of state.workspaces) {
+      for (const entry of Object.values(ws.folders)) {
+        entry.repos = entry.repos.filter((p) => p !== repoPath);
+      }
+    }
+    saveRepos();
+    renderRepoList();
   }
 
   async function loadReadme() {

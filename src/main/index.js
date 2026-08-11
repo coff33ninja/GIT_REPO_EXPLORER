@@ -379,6 +379,28 @@ function createWindow() {
             ' nestedFinal=' + nestedRepoCountFinal + ' wsFoldersFinal=' + wsFolderCountFinal + ' wsRootShown=' + wsRootShown +
             ' dbg=' + JSON.stringify(dbg) + ' toasts=' + JSON.stringify(toasts));
 
+          const ghostRepo = path.join(wsRoot, 'ghost-repo');
+          await win.webContents.executeJavaScript(
+            '(function(){var ws=JSON.parse(localStorage.getItem("neon.workspaces"));if(ws&&ws[0]&&ws[0].folders){ws[0].folders[""]=ws[0].folders[""]||{loaded:true,open:true,repos:[],dirs:[]};ws[0].folders[""].repos.push(' + JSON.stringify(ghostRepo) + ');localStorage.setItem("neon.workspaces",JSON.stringify(ws));}})()'
+          );
+          await win.webContents.reload();
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'typeof window.__neon !== "undefined" && document.querySelectorAll(".repo-group").length > 0'
+            );
+          }, 15000);
+          const wsRootAfterReload = await win.webContents.executeJavaScript(
+            'document.querySelector(".repo-group-name") ? document.querySelector(".repo-group-name").textContent === ' + JSON.stringify(wsRoot) + ' : false'
+          );
+          const ghostShown = await win.webContents.executeJavaScript(
+            '(function(){return Array.from(document.querySelectorAll(".repo-path")).some(function(x){return x.textContent===' + JSON.stringify(ghostRepo) + ';});})()'
+          );
+          const repoItemCountAfterReload = await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".repo-item").length'
+          );
+          console.log('SMOKE persist wsRootAfterReload=' + wsRootAfterReload +
+            ' ghostShown=' + ghostShown + ' repoItems=' + repoItemCountAfterReload);
+
           fs.rmSync(fixture, { recursive: true, force: true });
           const ok =
             /commits rendered/.test(graphStats) &&
