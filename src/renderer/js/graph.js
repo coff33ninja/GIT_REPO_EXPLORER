@@ -79,6 +79,7 @@
     const self = this;
     this._resize = () => {
       const rect = this.canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
       this.canvas.width = Math.max(200, Math.floor(rect.width * this.dpr));
       this.canvas.height = Math.max(200, Math.floor(rect.height * this.dpr));
       this.render();
@@ -113,6 +114,10 @@
       });
     };
     window.addEventListener('resize', this._onResizeDebounced);
+    if (typeof ResizeObserver !== 'undefined') {
+      this._ro = new ResizeObserver(this._onResizeDebounced);
+      this._ro.observe(this.canvas);
+    }
     this.canvas.addEventListener('click', this._click);
     this.canvas.addEventListener('mousemove', this._move);
   };
@@ -122,6 +127,7 @@
     this.currentHead = currentHead || null;
     this.laneOf = assignLanes(commits);
     this.edges = buildEdges(commits, this.laneOf);
+    this._resize();
     this.render();
   };
 
@@ -282,6 +288,7 @@
 
   GraphRenderer.prototype.destroy = function () {
     window.removeEventListener('resize', this._onResizeDebounced);
+    if (this._ro) this._ro.disconnect();
     this.canvas.removeEventListener('click', this._click);
     this.canvas.removeEventListener('mousemove', this._move);
   };

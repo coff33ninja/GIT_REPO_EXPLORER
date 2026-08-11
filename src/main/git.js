@@ -80,6 +80,7 @@ async function scanForRepos(rootDir, maxDepth = 3) {
 }
 
 async function getRepoMeta(repoPath) {
+  if (repoPath === undefined) console.log('REPOMETA GOT UNDEFINED PATH');
   const branch = await getBranch(repoPath);
   const head = await getHead(repoPath);
   const counts = await getStatusCounts(repoPath);

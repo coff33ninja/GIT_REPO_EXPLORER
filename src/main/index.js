@@ -10,7 +10,10 @@ const GIT_HANDLERS = {
   'git:is-repo': (_, dir) => git.isRepo(dir),
   'git:repo-root': (_, dir) => git.repoRoot(dir),
   'git:scan': (_, dir, depth) => git.scanForRepos(dir, depth),
-  'git:repo-meta': (_, repo) => git.getRepoMeta(repo),
+  'git:repo-meta': (_, repo) => {
+    if (SMOKE) console.log('SMOKE HANDLER repo-meta repo=' + JSON.stringify(repo));
+    return git.getRepoMeta(repo);
+  },
   'git:status': (_, repo) => git.getStatusCounts(repo),
   'git:full-status': (_, repo) => git.getFullStatus(repo),
   'git:untracked-diff': (_, repo, file) => git.getUntrackedDiff(repo, file),
@@ -30,8 +33,10 @@ function registerIpc() {
   for (const [channel, handler] of Object.entries(GIT_HANDLERS)) {
     ipcMain.handle(channel, async (_event, ...args) => {
       try {
-        return { ok: true, data: await handler(...args) };
+        if (SMOKE) console.log('SMOKE IPC ' + channel + ' args=' + JSON.stringify(args));
+        return { ok: true, data: await handler(null, ...args) };
       } catch (err) {
+        if (SMOKE) console.log('SMOKE IPC FAIL ' + channel + ' ' + (err.stack || err.message));
         return { ok: false, error: err.message };
       }
     });
@@ -126,6 +131,13 @@ function createWindow() {
           console.log('SMOKE title=' + JSON.stringify(title) + ' repoChip=' + JSON.stringify(repoChip) + ' canvas=' + canvas);
 
           const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'neon-fixture-'));
+          console.log('SMOKE direct getRepoMeta:');
+          try {
+            const dm = await git.getRepoMeta(fixture);
+            console.log('SMOKE direct ok branch=' + dm.branch + ' head=' + dm.head);
+          } catch (e) {
+            console.log('SMOKE direct FAIL ' + (e.stack || e.message));
+          }
           sh(['init', '-b', 'main'], fixture);
           sh(['config', 'user.email', 'smoke@neon.dev'], fixture);
           sh(['config', 'user.name', 'Smoke Test'], fixture);
@@ -137,9 +149,10 @@ function createWindow() {
           commit('c.txt', 'three\n', 'post merge', fixture);
           fs.writeFileSync(path.join(fixture, 'dirty.txt'), 'dirty\n');
 
-          await win.webContents.executeJavaScript(
+          const openResult = await win.webContents.executeJavaScript(
             '(async function(){try{await window.__neon.openRepo(' + JSON.stringify(fixture) + ');return "OK";}catch(e){return "THROW:"+e.message;}})()'
           );
+          console.log('SMOKE openResult=' + JSON.stringify(openResult));
           await sleep(1800);
 
           const graphStats = await win.webContents.executeJavaScript(
@@ -168,17 +181,66 @@ function createWindow() {
             'document.querySelectorAll(".file-row").length'
           );
 
+          await win.webContents.executeJavaScript(
+            'document.querySelector(".file-row").click()'
+          );
+          await sleep(800);
+          const fileDiffCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll("#inspectorBody .diff-file").length'
+          );
+
+          await win.webContents.executeJavaScript(
+            '(function(){var r=document.getElementById("graphCanvas").getBoundingClientRect();var ev=new MouseEvent("click",{clientX:r.left+43,clientY:r.top+35,bubbles:true});document.getElementById("graphCanvas").dispatchEvent(ev);})()'
+          );
+          await sleep(900);
+          const commitCardCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll("#inspectorBody .commit-card").length'
+          );
+
+          const shot = await win.webContents.capturePage();
+          const outPath = path.join(__dirname, '..', '..', 'docs', 'screenshot.png');
+          fs.mkdirSync(path.dirname(outPath), { recursive: true });
+          fs.writeFileSync(outPath, shot.toPNG());
+          console.log('SMOKE shot=' + outPath + ' bytes=' + shot.toPNG().length);
+
+          await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".tab")[0].click()'
+          );
+          await sleep(500);
+          const graphDataUrl = await win.webContents.executeJavaScript(
+            'document.getElementById("graphCanvas").toDataURL("image/png")'
+          );
+          const graphPng = Buffer.from(graphDataUrl.split(',')[1], 'base64');
+          fs.writeFileSync(path.join(__dirname, '..', '..', 'docs', 'graph.png'), graphPng);
+          console.log('SMOKE graphPng bytes=' + graphPng.length);
+          const canvasDims = await win.webContents.executeJavaScript(
+            '(function(){var c=document.getElementById("graphCanvas");return c.width+"x"+c.height;})()'
+          );
+          console.log('SMOKE canvasDims=' + JSON.stringify(canvasDims));
+
+          win.webContents.invalidate();
+          await sleep(600);
+          const shot2 = await win.webContents.capturePage();
+          fs.writeFileSync(outPath, shot2.toPNG());
+          console.log('SMOKE shot2 bytes=' + shot2.toPNG().length);
+
+          const toasts = await win.webContents.executeJavaScript(
+            'Array.from(document.querySelectorAll(".toast")).map(t=>t.textContent).join(" || ")'
+          );
           console.log('SMOKE graph=' + JSON.stringify(graphStats) + ' branch=' + JSON.stringify(branch) +
             ' leds=' + JSON.stringify(leds) + ' pixels=' + pixels +
             ' status=' + JSON.stringify(statusStats) + ' fileRows=' + fileRows +
-            ' dbg=' + JSON.stringify(dbg));
+            ' dbg=' + JSON.stringify(dbg) + ' toasts=' + JSON.stringify(toasts));
 
           fs.rmSync(fixture, { recursive: true, force: true });
           const ok =
             /commits rendered/.test(graphStats) &&
             branch === 'main' &&
             pixels > 1000 &&
-            fileRows >= 1;
+            fileRows >= 1 &&
+            fileDiffCount >= 1 &&
+            commitCardCount >= 1 &&
+            parseInt(canvasDims.split('x')[0], 10) > 500;
           if (!ok) throw new Error('renderer state mismatch');
           if (problems.length) {
             console.log('SMOKE PROBLEMS:');
