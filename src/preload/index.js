@@ -12,6 +12,7 @@ const api = {
   scan: (dir, depth) => invoke('git:scan', dir, depth),
   scanLevel: (dir) => invoke('git:scan-level', dir),
   isRepo: (dir) => invoke('git:is-repo', dir),
+  hasGitDir: (dir) => invoke('git:has-git-dir', dir),
   repoRoot: (dir) => invoke('git:repo-root', dir),
   repoMeta: (repo) => invoke('git:repo-meta', repo),
   status: (repo) => invoke('git:status', repo),

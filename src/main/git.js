@@ -94,19 +94,20 @@ async function scanFolderLevel(rootDir) {
   for (const entry of entries) {
     if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
     const full = path.join(rootDir, entry.name);
-    if (fs.existsSync(path.join(full, '.git'))) {
-      if (await isRepo(full)) {
-        level.repos.push({ path: full, name: entry.name, parent: rootDir });
-      } else {
-        level.dirs.push(entry.name);
-      }
+    const hasGit = fs.existsSync(path.join(full, '.git'));
+    if (hasGit && (await isRepo(full))) {
+      level.repos.push({ path: full, name: entry.name, parent: rootDir });
     } else {
-      level.dirs.push(entry.name);
+      level.dirs.push({ name: entry.name, git: hasGit });
     }
   }
   level.repos.sort((a, b) => a.name.localeCompare(b.name));
-  level.dirs.sort((a, b) => a.localeCompare(b));
+  level.dirs.sort((a, b) => a.name.localeCompare(b.name));
   return level;
+}
+
+function hasGitDir(dir) {
+  return fs.existsSync(path.join(dir, '.git'));
 }
 
 async function getRepoMeta(repoPath) {
@@ -384,6 +385,7 @@ async function getReadme(repoPath) {
 
 module.exports = {
   isRepo,
+  hasGitDir,
   repoRoot,
   scanForRepos,
   scanFolderLevel,

@@ -150,7 +150,7 @@
   }
 
   function buildWsTree(ws) {
-    const build = (key, path) => {
+    const build = (key, path, git) => {
       const entry = ws.folders[key];
       const children = new Map();
       if (entry) {
@@ -164,13 +164,15 @@
           });
         }
         for (const d of entry.dirs || []) {
-          const ck = key ? key + '/' + d : d;
-          children.set(ck, build(ck, wsJoin(path, d)));
+          const name = typeof d === 'string' ? d : d.name;
+          const dgit = typeof d === 'string' ? false : !!d.git;
+          const ck = key ? key + '/' + name : name;
+          children.set(ck, build(ck, wsJoin(path, name), dgit));
         }
       }
-      return { kind: 'dir', name: key ? key.split('/').pop() : '', key, path, entry, children };
+      return { kind: 'dir', name: key ? key.split('/').pop() : '', key, path, git, entry, children };
     };
-    return build('', ws.root);
+    return build('', ws.root, false);
   }
 
   async function loadWsFolder(ws, node) {
@@ -211,13 +213,20 @@
       const row = el('li', 'ws-folder' + (loading ? ' loading' : ''));
       row.style.paddingLeft = 10 + depth * 14 + 'px';
       row.innerHTML =
-        '<span class="ws-arrow"></span><span class="ws-folder-name"></span>' +
-        '<span class="ws-folder-count"></span>';
+        '<span class="ws-arrow"></span><span class="ws-git-badge"></span>' +
+        '<span class="ws-folder-name"></span><span class="ws-folder-count"></span>';
       row.querySelector('.ws-arrow').textContent = loading
         ? '\u25CC'
         : open
           ? '\u25BE'
           : '\u25B8';
+      const badge = row.querySelector('.ws-git-badge');
+      if (d.git) {
+        badge.textContent = '\u25C6';
+        badge.classList.add('ws-git');
+      } else {
+        badge.textContent = '\u25C9';
+      }
       row.querySelector('.ws-folder-name').textContent = d.name;
       row.querySelector('.ws-folder-count').textContent = entry
         ? entry.repos.length
@@ -336,7 +345,8 @@
     if (!dir) return;
     try {
       if (!(await api.isRepo(dir))) {
-        toast('NOT A GIT REPOSITORY', 'err');
+        const hasGit = await api.hasGitDir(dir);
+        toast(hasGit ? 'INVALID GIT REPOSITORY' : 'NOT A GIT REPOSITORY', 'err');
         return;
       }
       const root = await api.repoRoot(dir);

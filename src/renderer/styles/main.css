@@ -250,6 +250,16 @@ html, body {
   opacity: 0.85;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.ws-git-badge {
+  font-family: var(--mono); font-size: 9px;
+  color: var(--text-faint); flex: none; width: 12px;
+  text-align: center; opacity: 0.5;
+}
+.ws-git-badge.ws-git {
+  color: var(--green);
+  opacity: 1;
+  text-shadow: 0 0 6px rgba(0, 255, 157, 0.6);
+}
 .ws-folder-count {
   font-family: var(--mono); font-size: 9px; color: var(--text-faint);
   flex: none;

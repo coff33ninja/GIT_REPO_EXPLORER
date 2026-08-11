@@ -10,6 +10,7 @@ const SMOKE = process.argv.includes('--smoke');
 
 const GIT_HANDLERS = {
   'git:is-repo': (_, dir) => git.isRepo(dir),
+  'git:has-git-dir': (_, dir) => git.hasGitDir(dir),
   'git:repo-root': (_, dir) => git.repoRoot(dir),
   'git:scan': (_, dir, depth) => git.scanForRepos(dir, depth),
   'git:scan-level': (_, dir) => git.scanFolderLevel(dir),
@@ -133,7 +134,10 @@ function createWindow() {
       throw new Error('Timeout waiting for condition');
     };
 
+    let smokeStarted = false;
     win.webContents.on('did-finish-load', () => {
+      if (smokeStarted) return;
+      smokeStarted = true;
       setTimeout(async () => {
         try {
           const title = win.webContents.getTitle();
@@ -331,7 +335,6 @@ function createWindow() {
           const wsFolderCountFinal = await win.webContents.executeJavaScript(
             'document.querySelectorAll(".ws-folder").length'
           );
-          fs.rmSync(wsRoot, { recursive: true, force: true });
           await win.webContents.executeJavaScript(
             'document.querySelectorAll(".tab")[0].click()'
           );
@@ -384,11 +387,19 @@ function createWindow() {
             '(function(){var ws=JSON.parse(localStorage.getItem("neon.workspaces"));if(ws&&ws[0]&&ws[0].folders){ws[0].folders[""]=ws[0].folders[""]||{loaded:true,open:true,repos:[],dirs:[]};ws[0].folders[""].repos.push(' + JSON.stringify(ghostRepo) + ');localStorage.setItem("neon.workspaces",JSON.stringify(ws));}})()'
           );
           await win.webContents.reload();
-          await waitFor(async () => {
-            return await win.webContents.executeJavaScript(
-              'typeof window.__neon !== "undefined" && document.querySelectorAll(".repo-group").length > 0'
+          try {
+            await waitFor(async () => {
+              return await win.webContents.executeJavaScript(
+                'typeof window.__neon !== "undefined" && document.querySelectorAll(".repo-group").length > 0'
+              );
+            }, 15000);
+          } catch (e) {
+            const diag = await win.webContents.executeJavaScript(
+              '(function(){var saved=JSON.parse(localStorage.getItem("neon.workspaces")||"[]");return JSON.stringify({neon:typeof window.__neon, groups:document.querySelectorAll(".repo-group").length, items:document.querySelectorAll(".repo-item").length, ready:document.readyState, savedCount:saved.length, savedRoot:saved[0]?saved[0].root:null, savedFolders:saved[0]?Object.keys(saved[0].folders||{}):null, savedRepos:saved[0]&&saved[0].folders[""]?saved[0].folders[""].repos.length:null, wsState:window.__neon?JSON.stringify(window.__neon.state.workspaces.map(function(w){return {root:w.root, f:Object.keys(w.folders)};})):null});})()'
             );
-          }, 15000);
+            console.log('SMOKE reload-diag=' + diag);
+            throw e;
+          }
           const wsRootAfterReload = await win.webContents.executeJavaScript(
             'document.querySelector(".repo-group-name") ? document.querySelector(".repo-group-name").textContent === ' + JSON.stringify(wsRoot) + ' : false'
           );
@@ -401,6 +412,7 @@ function createWindow() {
           console.log('SMOKE persist wsRootAfterReload=' + wsRootAfterReload +
             ' ghostShown=' + ghostShown + ' repoItems=' + repoItemCountAfterReload);
 
+          fs.rmSync(wsRoot, { recursive: true, force: true });
           fs.rmSync(fixture, { recursive: true, force: true });
           const ok =
             /commits rendered/.test(graphStats) &&
@@ -423,6 +435,9 @@ function createWindow() {
             nestedRepoCountFinal >= 3 &&
             wsFolderCountFinal >= 3 &&
             wsRootShown === true &&
+            wsRootAfterReload === true &&
+            ghostShown === false &&
+            repoItemCountAfterReload >= 2 &&
             JSON.parse(scanResult).length >= 2 &&
             parseInt(canvasDims.split('x')[0], 10) > 500;
           if (!ok) throw new Error('renderer state mismatch');
