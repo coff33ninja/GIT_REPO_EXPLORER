@@ -12,6 +12,7 @@ const GIT_HANDLERS = {
   'git:is-repo': (_, dir) => git.isRepo(dir),
   'git:repo-root': (_, dir) => git.repoRoot(dir),
   'git:scan': (_, dir, depth) => git.scanForRepos(dir, depth),
+  'git:scan-level': (_, dir) => git.scanFolderLevel(dir),
   'git:repo-meta': (_, repo) => {
     if (SMOKE) console.log('SMOKE HANDLER repo-meta repo=' + JSON.stringify(repo));
     return git.getRepoMeta(repo);
@@ -279,6 +280,12 @@ function createWindow() {
             sh(['config', 'user.name', 'Smoke Test'], sub);
             commit('x.txt', 'x\n', 'init', sub);
           }
+          const deepRepo = path.join(wsRoot, 'proj-c', 'deep', 'sub', 'repo1');
+          fs.mkdirSync(deepRepo, { recursive: true });
+          sh(['init', '-b', 'main'], deepRepo);
+          sh(['config', 'user.email', 'smoke@neon.dev'], deepRepo);
+          sh(['config', 'user.name', 'Smoke Test'], deepRepo);
+          commit('x.txt', 'x\n', 'init', deepRepo);
           const scanResult = await win.webContents.executeJavaScript(
             '(async function(){var found=await window.__neon.scanWorkspace(' + JSON.stringify(wsRoot) + ');return JSON.stringify(found.map(function(r){return r.name;}));})()'
           );
@@ -288,8 +295,41 @@ function createWindow() {
           const nestedRepoCount = await win.webContents.executeJavaScript(
             'document.querySelectorAll(".repo-item-nested").length'
           );
+          const wsFolderCount = await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".ws-folder").length'
+          );
+          const deepRepoShownBefore = await win.webContents.executeJavaScript(
+            '(function(){var rows=Array.from(document.querySelectorAll(".repo-item-nested .repo-name"));return rows.some(function(n){return n.textContent==="repo1";});})()'
+          );
           const wsRootShown = await win.webContents.executeJavaScript(
             'document.querySelector(".repo-group-name") ? document.querySelector(".repo-group-name").textContent === ' + JSON.stringify(wsRoot) + ' : false'
+          );
+          const wsFolderExists = (name) =>
+            win.webContents.executeJavaScript(
+              '(function(){return Array.from(document.querySelectorAll(".ws-folder")).some(function(x){var n=x.querySelector(".ws-folder-name");return n&&n.textContent===' + JSON.stringify(name) + ';});})()'
+            );
+          const clickWsFolder = (name) =>
+            win.webContents.executeJavaScript(
+              '(function(){var f=Array.from(document.querySelectorAll(".ws-folder")).find(function(x){var n=x.querySelector(".ws-folder-name");return n&&n.textContent===' + JSON.stringify(name) + ';});if(f){f.click();return true;}return false;})()'
+            );
+          await clickWsFolder('proj-c');
+          await waitFor(() => wsFolderExists('deep'), 8000);
+          await clickWsFolder('deep');
+          await waitFor(() => wsFolderExists('sub'), 8000);
+          await clickWsFolder('sub');
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              '(function(){var rows=Array.from(document.querySelectorAll(".repo-item-nested .repo-name"));return rows.some(function(n){return n.textContent==="repo1";});})()'
+            );
+          }, 8000);
+          const deepRepoShown = await win.webContents.executeJavaScript(
+            '(function(){var rows=Array.from(document.querySelectorAll(".repo-item-nested .repo-name"));return rows.some(function(n){return n.textContent==="repo1";});})()'
+          );
+          const nestedRepoCountFinal = await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".repo-item-nested").length'
+          );
+          const wsFolderCountFinal = await win.webContents.executeJavaScript(
+            'document.querySelectorAll(".ws-folder").length'
           );
           fs.rmSync(wsRoot, { recursive: true, force: true });
           await win.webContents.executeJavaScript(
@@ -335,7 +375,8 @@ function createWindow() {
             ' tree=' + fileTreeCount + ' files=' + fileViewCount + ' diffToggle=' + fileDiffToggleCount +
             ' readmeCard=' + readmeCardCount + ' readmeHead=' + JSON.stringify(readmeHead) + ' readmeBold=' + readmeBold +
             ' scan=' + JSON.stringify(scanResult) + ' groups=' + repoGroupCount + ' nested=' + nestedRepoCount +
-            ' wsRootShown=' + wsRootShown +
+            ' wsFolders=' + wsFolderCount + ' deepRepoBefore=' + deepRepoShownBefore + ' deepRepoShown=' + deepRepoShown +
+            ' nestedFinal=' + nestedRepoCountFinal + ' wsFoldersFinal=' + wsFolderCountFinal + ' wsRootShown=' + wsRootShown +
             ' dbg=' + JSON.stringify(dbg) + ' toasts=' + JSON.stringify(toasts));
 
           fs.rmSync(fixture, { recursive: true, force: true });
@@ -354,6 +395,11 @@ function createWindow() {
             readmeBold >= 1 &&
             repoGroupCount >= 1 &&
             nestedRepoCount >= 2 &&
+            wsFolderCount >= 1 &&
+            deepRepoShownBefore === false &&
+            deepRepoShown === true &&
+            nestedRepoCountFinal >= 3 &&
+            wsFolderCountFinal >= 3 &&
             wsRootShown === true &&
             JSON.parse(scanResult).length >= 2 &&
             parseInt(canvasDims.split('x')[0], 10) > 500;

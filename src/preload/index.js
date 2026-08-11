@@ -10,6 +10,7 @@ const invoke = (channel, ...args) =>
 
 const api = {
   scan: (dir, depth) => invoke('git:scan', dir, depth),
+  scanLevel: (dir) => invoke('git:scan-level', dir),
   isRepo: (dir) => invoke('git:is-repo', dir),
   repoRoot: (dir) => invoke('git:repo-root', dir),
   repoMeta: (repo) => invoke('git:repo-meta', repo),

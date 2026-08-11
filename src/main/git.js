@@ -79,6 +79,28 @@ async function scanForRepos(rootDir, maxDepth = 3) {
   return withMeta;
 }
 
+async function scanFolderLevel(rootDir) {
+  const level = { repos: [], dirs: [] };
+  let entries;
+  try {
+    entries = fs.readdirSync(rootDir, { withFileTypes: true });
+  } catch {
+    return level;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
+    const full = path.join(rootDir, entry.name);
+    if (fs.existsSync(path.join(full, '.git'))) {
+      level.repos.push({ path: full, name: entry.name, parent: rootDir });
+    } else {
+      level.dirs.push(entry.name);
+    }
+  }
+  level.repos.sort((a, b) => a.name.localeCompare(b.name));
+  level.dirs.sort((a, b) => a.localeCompare(b));
+  return level;
+}
+
 async function getRepoMeta(repoPath) {
   if (repoPath === undefined) console.log('REPOMETA GOT UNDEFINED PATH');
   const branch = await getBranch(repoPath);
@@ -356,6 +378,7 @@ module.exports = {
   isRepo,
   repoRoot,
   scanForRepos,
+  scanFolderLevel,
   getRepoMeta,
   getBranch,
   getHead,

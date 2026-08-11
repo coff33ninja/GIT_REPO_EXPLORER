@@ -48,7 +48,7 @@
           state.workspaces.map((w) => ({
             root: w.root,
             expanded: w.expanded,
-            repos: w.repos.map((r) => r.path),
+            folders: w.folders,
           }))
         )
       );
@@ -72,42 +72,173 @@
       saved = JSON.parse(localStorage.getItem('neon.workspaces') || '[]');
     } catch { saved = []; }
     for (const w of saved) {
-      const repos = [];
-      for (const p of w.repos) {
-        try {
-          if (await api.isRepo(p)) {
-            repos.push({ path: p, name: p.split(/[\\/]/).pop(), parent: '' });
-          }
-        } catch { /* skip */ }
+      const folders = {};
+      let any = false;
+      for (const [key, entry] of Object.entries(w.folders || {})) {
+        if (!entry) continue;
+        folders[key] = {
+          loaded: true,
+          open: entry.open !== false,
+          repos: Array.isArray(entry.repos) ? entry.repos : [],
+          dirs: Array.isArray(entry.dirs) ? entry.dirs : [],
+        };
+        if (folders[key].repos.length) any = true;
       }
-      if (repos.length) {
-        state.workspaces.push({ root: w.root, expanded: w.expanded !== false, repos });
+      if (any) {
+        state.workspaces.push({
+          root: w.root,
+          expanded: w.expanded !== false,
+          folders,
+        });
       }
     }
     renderRepoList();
-    const first =
-      state.repos[0] || (state.workspaces[0] && state.workspaces[0].repos[0]);
+    const first = await firstAvailableRepo();
     if (first) await openRepo(first.path);
   }
 
+  async function firstAvailableRepo() {
+    if (state.repos.length) return state.repos[0];
+    for (const w of state.workspaces) {
+      for (const entry of Object.values(w.folders)) {
+        const p = entry.repos[0];
+        if (p) {
+          try {
+            if (await api.isRepo(p)) {
+              return { path: p, name: p.split(/[\\/]/).pop(), parent: '' };
+            }
+          } catch { /* skip */ }
+        }
+      }
+    }
+    return null;
+  }
+
+  function countKnownRepos(ws) {
+    let n = 0;
+    for (const entry of Object.values(ws.folders)) n += entry.repos.length;
+    return n;
+  }
+
+  function firstRepoPath(ws) {
+    for (const entry of Object.values(ws.folders)) {
+      if (entry.repos.length) return entry.repos[0];
+    }
+    return null;
+  }
+
   /* ---------------- repo list ---------------- */
-  function appendRepoItem(list, r, nested) {
+  function wsJoin(base, name) {
+    return base.replace(/[\\/]+$/, '') + '\\' + name;
+  }
+
+  function buildWsTree(ws) {
+    const build = (key, path) => {
+      const entry = ws.folders[key];
+      const children = new Map();
+      if (entry) {
+        for (const rp of entry.repos || []) {
+          const name = rp.split(/[\\/]/).pop();
+          children.set(name + '\u0000' + rp, {
+            kind: 'repo',
+            name,
+            key: key ? key + '/' + name : name,
+            path: rp,
+          });
+        }
+        for (const d of entry.dirs || []) {
+          const ck = key ? key + '/' + d : d;
+          children.set(ck, build(ck, wsJoin(path, d)));
+        }
+      }
+      return { kind: 'dir', name: key ? key.split('/').pop() : '', key, path, entry, children };
+    };
+    return build('', ws.root);
+  }
+
+  async function loadWsFolder(ws, node) {
+    if (ws.folders[node.key]) return;
+    ws._loading = ws._loading || {};
+    ws._loading[node.key] = true;
+    renderRepoList();
+    try {
+      const level = await api.scanLevel(node.path);
+      ws.folders[node.key] = {
+        loaded: true,
+        open: true,
+        repos: level.repos.map((r) => r.path),
+        dirs: level.dirs,
+      };
+    } catch {
+      ws.folders[node.key] = { loaded: true, open: true, repos: [], dirs: [] };
+    }
+    delete ws._loading[node.key];
+    saveRepos();
+    renderRepoList();
+  }
+
+  function renderWsChildren(list, ws, children, depth) {
+    const dirs = [];
+    const repos = [];
+    for (const node of children.values()) {
+      if (node.kind === 'dir') dirs.push(node);
+      else repos.push(node);
+    }
+    dirs.sort((a, b) => a.name.localeCompare(b.name));
+    repos.sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const d of dirs) {
+      const loading = !!(ws._loading && ws._loading[d.key]);
+      const entry = d.entry;
+      const open = entry ? entry.open !== false : false;
+      const row = el('li', 'ws-folder' + (loading ? ' loading' : ''));
+      row.style.paddingLeft = 10 + depth * 14 + 'px';
+      row.innerHTML =
+        '<span class="ws-arrow"></span><span class="ws-folder-name"></span>' +
+        '<span class="ws-folder-count"></span>';
+      row.querySelector('.ws-arrow').textContent = loading
+        ? '\u25CC'
+        : open
+          ? '\u25BE'
+          : '\u25B8';
+      row.querySelector('.ws-folder-name').textContent = d.name;
+      row.querySelector('.ws-folder-count').textContent = entry
+        ? entry.repos.length
+        : '\u2026';
+      row.addEventListener('click', () => {
+        if (loading) return;
+        if (!entry) {
+          loadWsFolder(ws, d);
+          return;
+        }
+        entry.open = !open;
+        saveRepos();
+        renderRepoList();
+      });
+      list.appendChild(row);
+      if (entry && open) renderWsChildren(list, ws, d.children, depth + 1);
+    }
+    for (const r of repos) appendRepoItem(list, r.name, r.path, depth);
+  }
+
+  function appendRepoItem(list, name, repoPath, depth) {
     const item = el('li', 'repo-item');
-    if (nested) item.classList.add('repo-item-nested');
+    if (depth > 0) item.classList.add('repo-item-nested');
+    item.style.paddingLeft = 10 + depth * 14 + 'px';
     item.innerHTML =
       '<div class="repo-name"></div><div class="repo-path"></div>';
-    item.querySelector('.repo-name').textContent = r.name;
-    item.querySelector('.repo-path').textContent = r.path;
-    if (state.currentRepo && state.currentRepo.path === r.path) {
+    item.querySelector('.repo-name').textContent = name;
+    item.querySelector('.repo-path').textContent = repoPath;
+    if (state.currentRepo && state.currentRepo.path === repoPath) {
       item.classList.add('is-active');
     }
-    item.addEventListener('click', () => openRepo(r.path));
+    item.addEventListener('click', () => openRepo(repoPath));
     list.appendChild(item);
   }
 
   function renderRepoList() {
     refs.repoList.innerHTML = '';
-    for (const r of state.repos) appendRepoItem(refs.repoList, r, false);
+    for (const r of state.repos) appendRepoItem(refs.repoList, r.name, r.path, 0);
     for (const w of state.workspaces) {
       const head = el('li', 'repo-group');
       head.innerHTML =
@@ -116,16 +247,14 @@
         '<span class="repo-group-count"></span>';
       head.querySelector('.repo-group-arrow').textContent = w.expanded ? '\u25BE' : '\u25B8';
       head.querySelector('.repo-group-name').textContent = w.root;
-      head.querySelector('.repo-group-count').textContent = w.repos.length;
+      head.querySelector('.repo-group-count').textContent = countKnownRepos(w);
       head.addEventListener('click', () => {
         w.expanded = !w.expanded;
         saveRepos();
         renderRepoList();
       });
       refs.repoList.appendChild(head);
-      if (w.expanded) {
-        for (const r of w.repos) appendRepoItem(refs.repoList, r, true);
-      }
+      if (w.expanded) renderWsChildren(refs.repoList, w, buildWsTree(w).children, 1);
     }
     if (!state.repos.length && !state.workspaces.length) {
       const empty = el('li', 'repo-item');
@@ -148,33 +277,32 @@
   async function scanWorkspace(dir) {
     toast('SCANNING // ' + dir, 'ok');
     try {
-      const found = await api.scan(dir, 4);
-      if (!found.length) {
-        toast('NO REPOSITORIES FOUND IN ' + dir, 'err');
-        return [];
-      }
-      const repos = found.map((r) => ({
-        path: r.path,
-        name: r.name,
-        parent: r.parent,
-      }));
+      const level = await api.scanLevel(dir);
+      const makeEntry = () => ({
+        loaded: true,
+        open: true,
+        repos: level.repos.map((r) => r.path),
+        dirs: level.dirs,
+      });
       const ws = state.workspaces.find((w) => w.root === dir);
       if (ws) {
-        ws.repos = repos;
+        ws.folders = { '': makeEntry() };
         ws.expanded = true;
       } else {
-        state.workspaces.push({ root: dir, expanded: true, repos });
+        state.workspaces.push({ root: dir, expanded: true, folders: { '': makeEntry() } });
       }
       saveRepos();
       renderRepoList();
+      const total = level.repos.length;
       toast(
-        'FOUND ' +
-          found.length +
-          ' REPOSITOR' +
-          (found.length > 1 ? 'IES' : 'Y')
+        total
+          ? 'FOUND ' + total + ' REPOSITOR' + (total > 1 ? 'IES' : 'Y') + ' // EXPAND FOLDERS FOR MORE'
+          : 'NO REPOS AT TOP LEVEL // EXPAND FOLDERS'
       );
-      if (!state.currentRepo) await openRepo(found[0].path);
-      return found;
+      if (!state.currentRepo && level.repos.length) {
+        await openRepo(level.repos[0].path);
+      }
+      return level.repos;
     } catch (err) {
       toast('SCAN FAILED: ' + err.message, 'err');
     }
