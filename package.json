@@ -1,0 +1,21 @@
+{
+  "name": "neon-git-explorer",
+  "version": "0.1.0",
+  "description": "A futuristic git repository explorer with a cyber neon HUD interface",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node scripts/test-git.js"
+  },
+  "keywords": [
+    "git",
+    "electron",
+    "repository",
+    "explorer",
+    "neon"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

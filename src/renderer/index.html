@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:" />
+  <title>NEON // GIT EXPLORER</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-aurora" aria-hidden="true"></div>
+  <div class="scanline" aria-hidden="true"></div>
+
+  <header class="hud-top">
+    <div class="brand">
+      <span class="brand-mark">&#9654;&#9646;</span>
+      <span class="brand-name">NEON&nbsp;GIT</span>
+      <span class="brand-sub">EXPLORER // v0.1</span>
+    </div>
+
+    <div class="hud-center">
+      <div class="repo-chip" id="repoChip">
+        <span class="chip-label">REPO</span>
+        <span class="chip-value" id="chipRepoPath">none selected</span>
+      </div>
+      <div class="repo-chip">
+        <span class="chip-label">BRANCH</span>
+        <span class="chip-value" id="chipBranch">-</span>
+      </div>
+      <div class="leds" id="statusLeds" title="working tree status">
+        <span class="led led-s" data-k="staged">0</span>
+        <span class="led led-u" data-k="unstaged">0</span>
+        <span class="led led-t" data-k="untracked">0</span>
+      </div>
+    </div>
+
+    <div class="hud-actions">
+      <button class="btn btn-ghost" id="btnScan" title="Scan a folder for repositories">SCAN</button>
+      <button class="btn btn-ghost" id="btnClone" title="Clone a repository">CLONE</button>
+      <button class="btn btn-primary" id="btnRefresh" title="Refresh repository data [F5]">REFRESH</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="side-section">
+        <div class="side-head">
+          <span class="side-title">REPOSITORIES</span>
+          <button class="mini-btn" id="btnAddRepo" title="Add repository">+</button>
+        </div>
+        <ul class="repo-list" id="repoList"></ul>
+      </section>
+
+      <section class="side-section" id="branchSection">
+        <div class="side-head">
+          <span class="side-title">BRANCHES</span>
+          <button class="mini-btn" id="btnNewBranch" title="Create a branch">+</button>
+        </div>
+        <ul class="branch-list" id="branchList"></ul>
+      </section>
+    </aside>
+
+    <section class="viewport">
+      <nav class="tabbar">
+        <button class="tab is-active" data-tab="graph">GRAPH</button>
+        <button class="tab" data-tab="status">STATUS</button>
+        <div class="tabbar-glow"></div>
+      </nav>
+
+      <div class="tab-panel is-active" id="panel-graph">
+        <div class="graph-wrap">
+          <div class="graph-head">
+            <span class="panel-label">COMMIT GRAPH</span>
+            <span class="graph-stats" id="graphStats"></span>
+          </div>
+          <canvas id="graphCanvas"></canvas>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-status">
+        <div class="status-wrap">
+          <div class="status-head">
+            <span class="panel-label">WORKING TREE</span>
+            <span class="graph-stats" id="statusStats"></span>
+          </div>
+          <div class="status-body" id="statusList"></div>
+        </div>
+      </div>
+
+      <div class="empty-state" id="emptyState">
+        <div class="empty-glyph">&#9670;</div>
+        <div class="empty-title">NO REPOSITORY LOADED</div>
+        <div class="empty-sub">Scan a folder, add a repository, or clone one to begin.</div>
+        <div class="empty-actions">
+          <button class="btn btn-primary" id="btnEmptyScan">SCAN FOLDER</button>
+          <button class="btn btn-ghost" id="btnEmptyClone">CLONE REPO</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <div class="inspector-head">
+        <span class="panel-label">INSPECTOR</span>
+        <button class="mini-btn" id="btnCloseInspector" title="Close">&#10005;</button>
+      </div>
+      <div class="inspector-body" id="inspectorBody">
+        <div class="inspector-placeholder">
+          Select a commit or file to inspect its diff.
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="hud-bottom">
+    <span class="foot-item" id="footPath">&#9670; await input</span>
+    <span class="foot-spacer"></span>
+    <span class="foot-item" id="footStats">commits: -</span>
+    <span class="foot-item" id="footClock">--:--:--</span>
+  </footer>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal" id="modalBox"></div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+  <div class="boot-veil" id="bootVeil">
+    <div class="boot-core">
+      <div class="boot-ring"></div>
+      <div class="boot-text">INITIALIZING GIT BRIDGE</div>
+    </div>
+  </div>
+
+  <script src="js/diff.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
