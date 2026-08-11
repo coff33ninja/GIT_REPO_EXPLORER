@@ -157,15 +157,16 @@
   /* ---------------- open / refresh ---------------- */
   async function openRepo(path) {
     toast('LOADING // ' + path.split(/[\\/]/).pop());
-    refs.emptyState.style.display = 'none';
     try {
       const meta = await api.repoMeta(path);
       state.currentRepo = meta;
+      refs.emptyState.style.display = 'none';
       renderRepoList();
       updateHud();
       await loadAll();
       graph.setSelected(null);
     } catch (err) {
+      refs.emptyState.style.display = 'flex';
       toast('OPEN FAILED: ' + err.message, 'err');
     }
   }
@@ -479,10 +480,24 @@
     switchTab('graph');
     tick();
     await restoreRepos();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    refs.bootVeil.classList.add('is-hidden');
     setTimeout(() => {
-      refs.bootVeil.classList.add('is-hidden');
-    }, 600);
-    window.__neon = { openRepo, refresh, state };
+      refs.bootVeil.style.display = 'none';
+    }, 500);
+    window.__neon = { openRepo, refresh, state, appReady };
+  }
+
+  function appReady() {
+    return new Promise((resolve) => {
+      const check = () => {
+        const canvas = refs.graphCanvas;
+        const ready = canvas && canvas.clientWidth > 0 && refs.graphStats.textContent.trim() !== '';
+        if (ready) return resolve();
+        setTimeout(check, 50);
+      };
+      check();
+    });
   }
 
   function tick() {

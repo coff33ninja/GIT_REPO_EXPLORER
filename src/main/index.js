@@ -117,6 +117,15 @@ function createWindow() {
       sh(['commit', '-m', msg], cwd);
     };
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const waitFor = async (check, timeout = 10000, interval = 100) => {
+      const start = Date.now();
+      while (Date.now() - start < timeout) {
+        const result = await check();
+        if (result) return result;
+        await sleep(interval);
+      }
+      throw new Error('Timeout waiting for condition');
+    };
 
     win.webContents.on('did-finish-load', () => {
       setTimeout(async () => {
@@ -153,7 +162,11 @@ function createWindow() {
             '(async function(){try{await window.__neon.openRepo(' + JSON.stringify(fixture) + ');return "OK";}catch(e){return "THROW:"+e.message;}})()'
           );
           console.log('SMOKE openResult=' + JSON.stringify(openResult));
-          await sleep(1800);
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'document.getElementById("graphStats").textContent.trim() !== "" && document.getElementById("graphCanvas").clientWidth > 0'
+            );
+          }, 12000);
 
           const graphStats = await win.webContents.executeJavaScript(
             'document.getElementById("graphStats").textContent'
@@ -173,7 +186,11 @@ function createWindow() {
           await win.webContents.executeJavaScript(
             'document.querySelectorAll(".tab")[1].click()'
           );
-          await sleep(400);
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'document.querySelectorAll(".file-row").length > 0'
+            );
+          }, 8000);
           const statusStats = await win.webContents.executeJavaScript(
             'document.getElementById("statusStats").textContent'
           );
@@ -206,7 +223,11 @@ function createWindow() {
           await win.webContents.executeJavaScript(
             'document.querySelectorAll(".tab")[0].click()'
           );
-          await sleep(500);
+          await waitFor(async () => {
+            return await win.webContents.executeJavaScript(
+              'document.getElementById("graphCanvas").clientWidth > 0 && document.getElementById("graphStats").textContent.trim() !== ""'
+            );
+          }, 8000);
           const graphDataUrl = await win.webContents.executeJavaScript(
             'document.getElementById("graphCanvas").toDataURL("image/png")'
           );
