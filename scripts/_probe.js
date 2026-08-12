@@ -25,11 +25,13 @@ app.whenReady().then(async () => {
       if (await ev('typeof window.__neon !== "undefined"')) break;
       await sleep(100);
     }
-    const res = await ev('(async function(){try{var l=await window.gitAPI.scanLevel("E:\\\\SCRIPTS\\\\Servers");return JSON.stringify({gitDirs:l.dirs.filter(function(d){return d.git;}).map(function(d){return d.name;}),plainDirs:l.dirs.filter(function(d){return !d.git;}).map(function(d){return d.name;}),repos:l.repos.map(function(r){return r.name;})});}catch(e){return "THROW:"+e.message;}})()');
-    console.log('PROBE Servers=' + res);
-
-    const scan = await ev('(async function(){var found=await window.__neon.scanWorkspace("E:\\\\SCRIPTS\\\\Servers");await new Promise(function(r){setTimeout(r,300);});var badges=Array.from(document.querySelectorAll(".ws-git-badge.ws-git")).map(function(b){var row=b.closest(".ws-folder");return row?row.querySelector(".ws-folder-name").textContent:null;});return JSON.stringify({found:found.map(function(r){return r.name;}),gitBadges:badges});})()');
-    console.log('PROBE scanRender=' + scan);
+    await ev('(async function(){await window.__neon.scanWorkspace("E:\\\\SCRIPTS\\\\Servers");return "done";})()');
+    await sleep(800);
+    const shot = await win.webContents.capturePage();
+    const out = path.join(__dirname, '..', 'docs', 'git-badges.png');
+    fs.writeFileSync(out, shot.toPNG());
+    console.log('PROBE shot=' + out + ' bytes=' + shot.toPNG().length);
+    console.log('PROBE badges=' + await ev('JSON.stringify(Array.from(document.querySelectorAll(".ws-git-badge")).map(function(b){return {t:b.textContent,git:b.classList.contains("ws-git"),name:b.closest(".ws-folder")?b.closest(".ws-folder").querySelector(".ws-folder-name").textContent:null};}))'));
   } catch (e) {
     console.log('PROBE ERROR ' + e.stack);
   } finally {
